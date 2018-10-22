@@ -1,0 +1,5 @@
+enum34==1.1.6
+numpy==1.15.3
+numpy-stl==2.7.0
+python-utils==2.3.0
+six==1.11.0
