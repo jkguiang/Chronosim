@@ -74,6 +74,7 @@ class OutTree:
         self._px[0] = self.px
         self._py[0] = self.py
         self._pz[0] = self.pz
+        self._pt[0] = self.pt
         self._eta[0] = self.eta
         self._phi[0] = self.phi
         self._nHits[0] = self.nHits
@@ -92,7 +93,7 @@ class OutTree:
         self.pdgID = rayObj["id"]
         self.q = rayObj["charge"]
         self.m = rayObj["mass"]
-        self.angle = np.arctan(rayObj["p"][2]/(rayObj["p"][0]**2 + rayObj["p"][1]**2)**(2))
+        self.angle = np.arctan(rayObj["p"][2]/(rayObj["p"][0]**2 + rayObj["p"][1]**2)**(0.5))
         self.px = rayObj["p"][0]
         self.py = rayObj["p"][1]
         self.pz = rayObj["p"][2]

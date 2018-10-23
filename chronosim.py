@@ -7,7 +7,7 @@ import os
 def LoadMesh(stlDir, sf=1, verbose=False):
     """ Load polygon mesh, only return polygons with normal in z-direction """
     layers = []
-    for i, stlFile in enumerate(os.listdir(stlDir)):
+    for i, stlFile in enumerate(sorted(os.listdir(stlDir))):
         lgadMesh = mesh.Mesh.from_file("{0}/{1}".format(stlDir, stlFile))
         allVectors = lgadMesh.vectors
         layers.append([])
@@ -128,7 +128,11 @@ def Parse(stlDir, rayPath, outPath, verbose=False):
 
 if __name__ == "__main__":
     import sys
-    stlDir = sys.argv[1]
-    rayPath = sys.argv[2]
-    outPath = sys.argv[3]
-    Parse(stlDir, rayPath, outPath, verbose=False)
+    if sys.argv[2] == "-debug":
+        stlDir = sys.argv[1]
+        LoadMesh(stlDir, sf=(0.001), verbose=True)
+    else:
+        stlDir = sys.argv[1]
+        rayPath = sys.argv[2]
+        outPath = sys.argv[3]
+        Parse(stlDir, rayPath, outPath, verbose=False)
