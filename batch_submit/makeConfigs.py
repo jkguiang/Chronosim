@@ -1,10 +1,11 @@
 import glob, os, subprocess
 
-tag = "test_v1"
+tag = "test_v2"
+stlTag = "wMod-3x2_41mmGap"
 
-outdir = "/hadoop/cms/store/user/jguiang/chronosim/{0}".format(tag)
+outdir = "/hadoop/cms/store/user/jguiang/chronosim/{0}_{1}".format(tag, stlTag)
 
-fout = open("configs/config_{0}.cmd".format(tag), 'w')
+fout = open("configs/config_{0}_{1}.cmd".format(tag, stlTag), 'w')
 
 username = os.environ["USER"]
 x509file = subprocess.check_output(["find","/tmp/", "-maxdepth", "1", "-type", "f", "-user", username, "-regex", "^.*x509.*$"])
@@ -28,11 +29,11 @@ x509userproxy={1}
 
 files = glob.glob("/hadoop/cms/store/user/bemarsh/LGAD/traj_inputs_for_jonathan/{0}/*.txt".format(tag))
 jobid = 0
-for f in files:
+for f in files[::2]:
     jobid = (f.split("_")[-1]).split(".")[0]
     fout.write("executable=wrapper.sh\n")
     fout.write("transfer_executable=True\n")
-    fout.write("arguments={0} {1} {2}\n".format(jobid, tag, outdir))
+    fout.write("arguments={0} {1} {2} {3}\n".format(jobid, tag, stlTag, outdir))
     fout.write("queue\n\n")
 
 

@@ -6,7 +6,8 @@
 
 FILEID=$1
 TAG=$2
-COPYDIR=$3
+STLTAG=$3
+COPYDIR=$4
 
 return
 
@@ -55,9 +56,9 @@ ls -a
 # run it
 #
 INFILE="/hadoop/cms/store/user/bemarsh/LGAD/traj_inputs_for_jonathan/${TAG}/output_${FILEID}.txt"
-echo "[wrapper] running: python chronosim.py" "stl_files" $INFILE "output.root" 
+echo "[wrapper] running: python chronosim.py" "/nfs-7/userdata/jguiang/chronosim/stl/${STLTAG}" $INFILE "output.root" 
 
-python chronosim.py stl_files $INFILE output.root
+python chronosim.py nfs-7/userdata/jguiang/chronosim/stl/${STLTAG} $INFILE output.root
 
 #
 # do something with output
