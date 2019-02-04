@@ -1,82 +1,71 @@
+# -*- coding: utf-8 -*-
 import numpy as np
 from stl import mesh
 from outtree import OutTree
 import ROOT
 import os
 
-def LoadMesh(stlDir, sf=1, verbose=False):
-    """ Load polygon mesh, only return polygons with normal in z-direction """
-    layers = []
-    for i, stlFile in enumerate(sorted(os.listdir(stlDir))):
-        lgadMesh = mesh.Mesh.from_file("{0}/{1}".format(stlDir, stlFile))
-        allVectors = lgadMesh.vectors
-        layers.append([])
-        for j, n in enumerate(lgadMesh.normals):
-            if (n[2] > 0):
-                layers[i].append([ allVectors[j][0]*sf, allVectors[j][1]*sf, allVectors[j][2]*sf ])
-
-    if verbose:
-        print("Loaded polygons from directory: {}".format(stlDir))
-        nLGAD = 0 
-        for k, layer in enumerate(layers):
-            print("{0} LGADs in layer {1}".format(len(layer)/2, k))
-            nLGAD += len(layer)/2
-        nASIC = nLGAD*2
-        print("---------------- Cost ----------------")
-        print("+ {0} LGADs (${1})".format(nLGAD, 140*nLGAD))
-        print("+ {0} ASICs (${1})".format(nASIC, 51*nASIC))
-        print("+ {0} Al-N Support Structures (${1})".format(nASIC, 2*nASIC))
-        print("+ {0} Power Converters (${1})".format(nASIC, 3*nASIC))
-        print("+ {0} Transceivers (${1})".format(nASIC, 4*nASIC))
-        print("______________________________________")
-        print("= ${} total".format(140*nLGAD+60*nASIC))
-
-    return layers
-
-def LoadRays(rayPath, verbose=False):
-    """ Load ray trajectory data from txt file, map to dict """
-    rays = []
-    with open(rayPath, "r") as rayFile:
-        for line in rayFile.readlines():
-            ray = [ float(val) for val in line.split() ]
-            rays.append({ "id":     ray[0],
-                          "mass":   ray[1],
-                          "charge": ray[2],
-                          "pt":     ray[3],
-                          "eta":    ray[4],
-                          "phi":    ray[5],
-                          "pos":    [ ray[6], ray[7], ray[8] ],
-                          "p":    [ ray[9], ray[10], ray[11] ]}) 
-    if verbose:
-        print("Loaded {0} trajectories from file {1}".format(len(rays), rayPath))
-
-    return rays
+def DotProduct(a, b):
+    """ Return a·b """
+    return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]
 
 def CrossProduct(a, b):
-    """ Return z-component of a x b """
-    return (a[0]*b[1] - a[1]*b[0])
+    """ Return a x b """
+    cross = []
+    cross.append(a[1]*b[2] - a[2]*b[1])
+    cross.append(a[2]*b[0] - a[0]*b[2])
+    cross.append(a[0]*b[1] - a[1]*b[0])
+    return cross
 
-def CheckHit(poly, hitPos):
+def GetTransform(n):
+    """ Get matrix R that rotates point into new basis
+        where z -> n (normalized facet normal vector)
+    """
+    # New basis vectors in original coordinates
+    e2 = n                    # z -> normal-direction (originally in x-y)
+    e1 = [0,0,1]              # y -> z-direction
+    e0 = CrossProduct(e1, e2) # x -> e1 = e1xe2
+    # Construct rotation matrix
+    R = [ [e0[0], e1[0], e2[0]], 
+          [e0[1], e1[1], e2[1]], 
+          [e0[2], e1[2], e2[2]] ]
+
+    return np.array(R)
+
+def CheckHit(poly, hitPos, norm):
     """ Check that nearby ray's trajectory intersects polygon """
-    hitPosToVertex = [[ (poly[0][0]-hitPos[0]), (poly[0][1]-hitPos[1]) ],
-                      [ (poly[1][0]-hitPos[0]), (poly[1][1]-hitPos[1]) ], 
-                      [ (poly[2][0]-hitPos[0]), (poly[2][1]-hitPos[1]) ]]
+    # Return False if hit pos on opposite side of BTL
+    if DotProduct([hitPos[0], hitPos[1], 0], norm) < 0:
+        return False
+    # Stores vectors from hit pos to each vertex of poly
+    hitPosToVertex = []
+    # Get rotation matrix
+    R = GetTransform(norm)
+    for vertex in poly:
+        # Get hit pos and vertex in rotated basis
+        hitPosTransf = np.matmul(R, np.array(hitPos))
+        vertexTransf = np.matmul(R, np.array(vertex))
+        # Translate hit pos and vertex to same plane
+        hitPosTransf[2] = 0
+        vertexTransf[2] = 0
+        # Store vector between hit pos and vertex
+        hitPosToVertex.append(np.subtract(vertexTransf, hitPosTransf))
 
-    z0 = CrossProduct(hitPosToVertex[0], hitPosToVertex[1])
-    z1 = CrossProduct(hitPosToVertex[1], hitPosToVertex[2])
-    z2 = CrossProduct(hitPosToVertex[2], hitPosToVertex[0])
+    # Take cross products
+    cross0 = CrossProduct(hitPosToVertex[0], hitPosToVertex[1])
+    cross1 = CrossProduct(hitPosToVertex[1], hitPosToVertex[2])
+    cross2 = CrossProduct(hitPosToVertex[2], hitPosToVertex[0])
 
-    return (z0 > 0 and z1 > 0 and z2 > 0)
+    return (cross0[2] > 0 and cross1[2] > 0 and cross2[2] > 0)
 
-
-def Parse(stlDir, rayPath, outPath, verbose=False):
+def Parse(layers, norms, rays, outPath, verbose=False):
     """ Parse polygons and rays, look for hits """
-    layers = LoadMesh(stlDir, sf=(0.001), verbose=verbose)
-    rays = LoadRays(rayPath, verbose=verbose)
+    from tqdm import tqdm
+    # Setup output file
     outFile = ROOT.TFile(outPath, "RECREATE")
     rayOut = OutTree()
     # Loop over rays
-    for i, ray in enumerate(rays):
+    for i, ray in enumerate(tqdm(rays)):
         # Initialize output tree
         rayOut.GetKinematics(ray)
         nHits = 0
@@ -97,12 +86,9 @@ def Parse(stlDir, rayPath, outPath, verbose=False):
                 rayOut.y = hitPos[1]
                 rayOut.z = hitPos[2]
             # Loop over polygons
-            for poly in layer:
-                # Calculate ray's proximity to first polygon vertex
-                xDisp = abs(hitPos[0] - poly[0][0])
-                yDisp = abs(hitPos[1] - poly[0][1])
+            for k, poly in enumerate(layer):
                 # Check for proximity then trajectory intersection
-                if xDisp < 0.1 and yDisp < 0.1 and CheckHit(poly, hitPos):
+                if CheckHit(poly, hitPos, norms[j][k]):
                     nHits += 1
                     layerHits[j] = True
                     layerHitPosX[j] = hitPos[0]
@@ -119,6 +105,7 @@ def Parse(stlDir, rayPath, outPath, verbose=False):
         rayOut.Fill()
 
     if verbose:
+        print("{} hits".format(nHits))
         print("Finished")
 
     rayOut.tree.Write()
@@ -135,4 +122,4 @@ if __name__ == "__main__":
         stlDir = sys.argv[1]
         rayPath = sys.argv[2]
         outPath = sys.argv[3]
-        Parse(stlDir, rayPath, outPath, verbose=False)
+        Parse(stlDir, rayPath, outPath, verbose=True)
